@@ -13,7 +13,7 @@ fi
 
 cargo build --release
 
-cargo run install
+target/*/release/cargo-xbuild-redirector install
 
 echo install complete.
 
