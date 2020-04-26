@@ -139,10 +139,10 @@ impl CargoRedirectHelper {
 
         // let mut cmd = Command::new("echo");
         let mut cmd = Command::new(redir_path);
-        let mut firstSeen = false;
+        let mut first_seen = false;
         for arg in env::args() {
-            if !firstSeen {
-                firstSeen = true;
+            if !first_seen {
+                first_seen = true;
                 continue;
             }
             if as_xbuild && arg.eq("build") {

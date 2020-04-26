@@ -13,7 +13,7 @@ fi
 
 cargo build --release
 
-./target/x86_64-unknown-linux-gnu/release/cargo-xbuild-redirector install
+cargo run install
 
 echo install complete.
 
