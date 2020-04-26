@@ -1,3 +1,5 @@
+[![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/clap-rs/clap/blob/master/LICENSE-APACHE)
+
 # Cargo xbuild redirector
 
 Allows cargo-xbuild to with with the IntelliJ ide (by replacing cargo in the xtensta toolchain 
