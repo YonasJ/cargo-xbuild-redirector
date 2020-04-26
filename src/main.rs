@@ -1,19 +1,19 @@
-use std::env;
-use std::path::{PathBuf, Path};
-use std::process::{exit, Command};
-use clap::{Arg, App, SubCommand};
+use clap::{App, Arg, SubCommand};
 use ex::fs;
+use ex::fs::{copy, create_dir_all};
 use regex::Regex;
-use ex::fs::copy;
+use std::env;
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
+use std::process::{exit, Command};
 
 struct CargoRedirectHelper {
     my_path: PathBuf,
-    my_host_triple: String
+    my_host_triple: String,
 }
 
-const CRATE_NAME:&str = "cargo-xbuild-redirector";
-const REDIRECTED_CARGO_NAME:&str = "cargo-xbuild-redirector-real";
-
+const CRATE_NAME: &str = "cargo-xbuild-redirector";
+const REDIRECTED_CARGO_NAME: &str = "cargo-xbuild-redirector-real";
 
 impl CargoRedirectHelper {
     fn new() -> Result<CargoRedirectHelper, std::io::Error> {
@@ -22,7 +22,10 @@ impl CargoRedirectHelper {
 
         Ok(CargoRedirectHelper {
             my_path: env::current_exe()?,
-            my_host_triple: platforms::guess_current().expect("Unable to determine platform").target_triple.to_owned()
+            my_host_triple: platforms::guess_current()
+                .expect("Unable to determine platform")
+                .target_triple
+                .to_owned(),
         })
     }
 
@@ -46,7 +49,7 @@ impl CargoRedirectHelper {
 
             if let Some(toolchain) = install.value_of("toolchain") {
                 println!("Installing for toolchain {}", toolchain);
-                cmd.arg(format!("+{}",toolchain));
+                cmd.arg(format!("+{}", toolchain));
             }
             cmd.arg("which");
             cmd.arg("cargo");
@@ -54,30 +57,48 @@ impl CargoRedirectHelper {
                 Ok(output) => {
                     if output.status.success() && output.status.code().unwrap() == 0 {
                         // println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-                        let cargo_path_str = format!("{}", String::from_utf8_lossy(&output.stdout).trim());
+                        let cargo_path_str =
+                            format!("{}", String::from_utf8_lossy(&output.stdout).trim());
                         let cargo_base = PathBuf::from(&cargo_path_str);
                         let mut cargo_redir = PathBuf::from(&cargo_path_str);
                         cargo_redir.set_file_name(REDIRECTED_CARGO_NAME);
 
                         if !cargo_base.exists() && !cargo_redir.exists() {
-                            println!("Install aborted - cannot find cargo at expected location: {:?}", cargo_base);
+                            println!(
+                                "Install aborted - cannot find cargo at expected location: {:?}",
+                                cargo_base
+                            );
                             exit(1);
                         }
 
                         if !cargo_redir.exists() {
-                            println!("Moving {:?} to {:?} to install re-director.", cargo_base, cargo_redir);
+                            println!(
+                                "Moving {:?} to {:?} to install re-director.",
+                                cargo_base, cargo_redir
+                            );
                             copy(&cargo_base, &cargo_redir).unwrap();
                         }
-                        println!("Moving {:?} to {:?} to install re-director.", self.my_path, cargo_base);
+                        println!(
+                            "Moving {:?} to {:?} to install re-director.",
+                            self.my_path, cargo_base
+                        );
                         copy(&self.my_path, &cargo_base).unwrap();
 
                         return Ok(());
                     } else {
-                        println!("Failed to execute rustup: {}\n{}{}", output.status, String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+                        println!(
+                            "Failed to execute rustup: {}\n{}{}",
+                            output.status,
+                            String::from_utf8_lossy(&output.stdout),
+                            String::from_utf8_lossy(&output.stderr)
+                        );
                     }
                 }
                 Err(e) => {
-                    println!("Unable to execute `rustup which cargo` to determine version: {:?}",e);
+                    println!(
+                        "Unable to execute `rustup which cargo` to determine version: {:?}",
+                        e
+                    );
                     exit(1);
                 }
             }
@@ -87,12 +108,31 @@ impl CargoRedirectHelper {
 
         Ok(())
     }
+    /**
+    Users of this library may want to build some non-cross platform targets as well. However, cargo
+    search for the .cargo/config file up the folder tree, so if there is a higher level project
+    that is a cross compiled project, this can trigger cross compilation. This build command
+    just set's the target for this project to your local architecture.
+    **/
+    fn create_local_arch_cargo_config(&self) {
+        let config_path_str = format!("{}/.cargo/config", env::var("CARGO_MANIFEST_DIR").unwrap());
+        let cargo_config_path = Path::new(&config_path_str);
+        if !cargo_config_path.exists() {
+            create_dir_all(cargo_config_path.parent().unwrap()).unwrap();
+            // let my_host_triple = platforms::guess_current().expect("Unable to determine platform").target_triple.to_owned();
 
+            let mut cargo_config = String::new();
+            writeln!(cargo_config, "[build]").unwrap();
+            writeln!(cargo_config, "target = \"{}\"", self.my_host_triple).unwrap();
+            fs::write(cargo_config_path, cargo_config).unwrap();
+        }
+    }
 
     fn get_cargo_config_build_target(&self) -> Result<String, std::io::Error> {
         let cargo_config_path = Path::new(".cargo/config");
         if !cargo_config_path.exists() {
-            println!("No .cargo/config file exists.");
+            println!("No .cargo/config file exists. Generating default for this target.");
+            self.create_local_arch_cargo_config();
             return Ok(self.my_host_triple.clone());
         }
         let cargo_config = fs::read_to_string(cargo_config_path).unwrap();
@@ -118,13 +158,16 @@ impl CargoRedirectHelper {
         match self.get_cargo_config_build_target() {
             Ok(target) => {
                 if target.eq(&self.my_host_triple) {
-                    println!("{} redirecting to real cargo for target={:?}", CRATE_NAME, target);
+                    println!(
+                        "{} redirecting to real cargo for target={:?}",
+                        CRATE_NAME, target
+                    );
                     self.run_real_cargo(false);
                 } else {
                     println!("{} redirecting to real cargo with xbuild because target={:?} does not match host {:?}", CRATE_NAME, target, self.my_host_triple);
                     self.run_real_cargo(true);
                 }
-            },
+            }
             Err(e) => {
                 println!("{} unable to determine target: {:?}", CRATE_NAME, e);
             }
@@ -133,7 +176,7 @@ impl CargoRedirectHelper {
         Ok(())
     }
 
-    fn run_real_cargo(&self, as_xbuild:bool) {
+    fn run_real_cargo(&self, as_xbuild: bool) {
         let mut redir_path = PathBuf::from(self.my_path.as_os_str());
         redir_path.set_file_name(REDIRECTED_CARGO_NAME);
 

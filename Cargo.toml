@@ -11,3 +11,7 @@ clap = "^2"
 ex = "^0"
 platforms = "^0.2"
 regex = "^1"
+
+[build-dependencies]
+ex = "^0"
+platforms = "^0.2"
