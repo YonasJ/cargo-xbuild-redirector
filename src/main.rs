@@ -115,6 +115,9 @@ impl CargoRedirectHelper {
     just set's the target for this project to your local architecture.
     **/
     fn create_local_arch_cargo_config(&self) {
+        if env::var("CARGO_MANIFEST_DIR").is_err() {
+            env::set_var("CARGO_MANIFEST_DIR", env::current_dir().unwrap().to_str().unwrap());
+        }
         let config_path_str = format!("{}/.cargo/config", env::var("CARGO_MANIFEST_DIR").unwrap());
         let cargo_config_path = Path::new(&config_path_str);
         if !cargo_config_path.exists() {
